@@ -55,17 +55,6 @@
       z-index: 0;
     }
 
-    /* ── film grain overlay ── */
-    body::after {
-      content: '';
-      position: fixed;
-      inset: 0;
-      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
-      opacity: 0.015;
-      pointer-events: none;
-      z-index: 9999;
-    }
-
     .wrap {
       max-width: 760px;
       margin: 0 auto;
@@ -1104,6 +1093,21 @@
         opacity: 0;
       }
     }
+
+    /* ── peter griffin easter egg ── */
+    .peter-griffin {
+      position: fixed;
+      bottom: -60px;
+      right: -20px;
+      width: 150px;
+      z-index: 1000;
+      transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      cursor: crosshair;
+    }
+
+    .peter-griffin:hover {
+      transform: translateY(-50px);
+    }
   </style>
 </head>
 
@@ -1255,6 +1259,9 @@
     <div id="results"></div>
 
   </div>
+
+  <img src="https://upload.wikimedia.org/wikipedia/en/c/c2/Peter_Griffin.png" class="peter-griffin" alt="Hehehe"
+    title="Hehehehe">
 
   <script>
     // ─────────────────────────────────────────────────────────────────────────────
