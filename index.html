@@ -452,6 +452,45 @@
       color: var(--accent);
     }
 
+    /* ── timetable session nav ── */
+    .tt-session-nav {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      margin-bottom: 14px;
+    }
+
+    .tt-session-arrow {
+      background: var(--surface2);
+      border: 1.5px solid var(--border);
+      color: var(--text);
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 14px;
+      transition: all .15s ease;
+      font-family: var(--mono);
+    }
+
+    .tt-session-arrow:hover {
+      background: var(--accent);
+      color: var(--bg);
+      border-color: var(--accent);
+    }
+
+    .tt-session-label {
+      font-family: var(--display);
+      font-size: 16px;
+      letter-spacing: .04em;
+      min-width: 160px;
+      text-align: center;
+    }
+
     /* day picker (shown when day-off is active) */
     .day-picker {
       margin-top: 12px;
@@ -1209,6 +1248,7 @@
       <div class="course-count" id="courseCount"></div>
     </div>
 
+
     <!-- Step 2: Pick courses -->
     <div class="step">
       <div class="step-label"><span class="step-num">2</span> Add courses</div>
@@ -1272,6 +1312,9 @@
     let prefs = { gaps: false, early: false, dayoff: false, dayCode: null };
     let allResults = [];
     let resultIdx = 0;
+    let currentTTSession = 0;  // index into SESSION_ORDER for timetable view
+    const SESSION_ORDER = ['early', 'late', 'full'];
+    const SESSION_LABELS = { early: '☀ Early Summer', late: '🌙 Late Summer', full: '📅 Full Summer' };
 
     const DAY_MAP = { M: 'Monday', T: 'Tuesday', W: 'Wednesday', R: 'Thursday', F: 'Friday' };
     const DAY_FULL = { M: 'Mon', T: 'Tue', W: 'Wed', R: 'Thu', F: 'Fri' };
@@ -1292,6 +1335,20 @@
         'wednesday': 'W', 'wed': 'W', 'thursday': 'R', 'thu': 'R', 'friday': 'F', 'fri': 'F'
       };
       return raw.trim().split(/\s+/).map(t => map[t.toLowerCase()]).filter(Boolean);
+    }
+
+    // Classify a section into early/late/full summer based on its meeting dates
+    function classifySession(dateStr) {
+      if (!dateStr) return 'full';
+      const parts = dateStr.match(/^(.+?)\s+to\s+(.+)$/);
+      if (!parts) return 'full';
+      const startDate = new Date(parts[1]);
+      const endDate = new Date(parts[2]);
+      if (isNaN(startDate) || isNaN(endDate)) return 'full';
+      const julyFirst = new Date(startDate.getFullYear(), 6, 1);
+      if (endDate < julyFirst) return 'early';
+      if (startDate >= julyFirst) return 'late';
+      return 'full';
     }
 
     function parseHTML(html) {
@@ -1321,12 +1378,17 @@
         if (!timeRow) return;
         const txt = timeRow.textContent;
 
+        // Extract meeting date for session classification
+        const dateMatch = txt.match(/Meeting Date:\s*(.+?)\s*Days:/);
+        const dateRange = dateMatch ? dateMatch[1].trim() : '';
+        const session = classifySession(dateRange);
+
         const dayMatch = txt.match(/Days:\s*(.*?)\s*Time:/);
         const timeMatch = txt.match(/Time:\s*(\d{2}:\d{2})\s*-\s*(\d{2}:\d{2})/);
         if (!dayMatch || !timeMatch) {
           // Unscheduled/async course — no time so it never conflicts
           if (!data[name]) data[name] = [];
-          data[name].push({ name, letter, type, crn, days: [], start: 0, end: 0 });
+          data[name].push({ name, letter, type, crn, days: [], start: 0, end: 0, session });
           return;
         }
 
@@ -1337,6 +1399,7 @@
           name, letter, type, crn, days,
           start: toMinutes(timeMatch[1]),
           end: toMinutes(timeMatch[2]),
+          session,
         };
 
         if (!data[name]) data[name] = [];
@@ -1349,7 +1412,14 @@
     // ─────────────────────────────────────────────────────────────────────────────
     // Conflict detection & schedule finding
     // ─────────────────────────────────────────────────────────────────────────────
+    function sessionsOverlap(sa, sb) {
+      if (sa === 'early' && sb === 'late') return false;
+      if (sa === 'late' && sb === 'early') return false;
+      return true;
+    }
+
     function overlaps(a, b) {
+      if (!sessionsOverlap(a.session, b.session)) return false;
       const common = a.days.filter(d => b.days.includes(d));
       if (!common.length) return false;
       return a.start < b.end && a.end > b.start;
@@ -1659,7 +1729,7 @@
           <div>
             <div style="font-family:var(--mono);font-size:11px;color:var(--muted);
               text-transform:uppercase;letter-spacing:.07em;margin-bottom:5px">
-              ${s.type}  <span style="color:var(--border)">·</span>  ${s.letter}
+              ${s.type}  <span style="color:var(--border)">·</span>  ${s.letter}  <span style="color:var(--border)">·</span>  <span style="color:${s.session === 'early' ? '#4ade80' : s.session === 'late' ? '#f97316' : 'var(--blue)'}">${s.session === 'early' ? '☀ Early' : s.session === 'late' ? '🌙 Late' : '📅 Full'}</span>
             </div>
             <div class="card-days">${dayPips}</div>
           </div>
@@ -1722,24 +1792,72 @@
     // ─────────────────────────────────────────────────────────────────────────────
     // Mini timetable grid
     // ─────────────────────────────────────────────────────────────────────────────
+    // Track which sessions have courses in the current schedule
+    let ttSessionsAvailable = [];
+
+    function cycleTTSession(dir) {
+      if (!ttSessionsAvailable.length) return;
+      currentTTSession = (currentTTSession + dir + ttSessionsAvailable.length) % ttSessionsAvailable.length;
+      const schedule = allResults[resultIdx];
+      const sessionKey = ttSessionsAvailable[currentTTSession];
+      document.getElementById('timetableContainer').innerHTML = renderTimetableGrid(schedule, sessionKey);
+      // Update label + arrows
+      document.getElementById('ttSessionLabel').textContent = SESSION_LABELS[sessionKey];
+    }
+
     function renderTimetable(schedule) {
+      // Determine which sessions exist in this schedule
+      const sessionsInSchedule = new Set(schedule.map(s => s.session));
+      ttSessionsAvailable = SESSION_ORDER.filter(s => {
+        if (s === 'early') return sessionsInSchedule.has('early') || sessionsInSchedule.has('full');
+        if (s === 'late') return sessionsInSchedule.has('late') || sessionsInSchedule.has('full');
+        if (s === 'full') return sessionsInSchedule.has('full');
+        return false;
+      });
+      // Default to first available session
+      if (currentTTSession >= ttSessionsAvailable.length) currentTTSession = 0;
+      const sessionKey = ttSessionsAvailable[currentTTSession] || 'early';
+
+      const navHtml = ttSessionsAvailable.length > 1 ? `
+      <div class="tt-session-nav">
+        <button class="tt-session-arrow" onclick="cycleTTSession(-1)">←</button>
+        <div class="tt-session-label" id="ttSessionLabel">${SESSION_LABELS[sessionKey]}</div>
+        <button class="tt-session-arrow" onclick="cycleTTSession(1)">→</button>
+      </div>` : `
+      <div class="tt-session-nav">
+        <div class="tt-session-label" id="ttSessionLabel">${SESSION_LABELS[sessionKey]}</div>
+      </div>`;
+
+      return `
+    <div class="timetable-wrap">
+      <div class="timetable-label">Weekly view</div>
+      ${navHtml}
+      <div id="timetableContainer">${renderTimetableGrid(schedule, sessionKey)}</div>
+    </div>`;
+    }
+
+    function renderTimetableGrid(schedule, sessionFilter) {
+      // Filter schedule by session: show matching + full summer courses
+      const filtered = schedule.filter(s => {
+        if (sessionFilter === 'full') return s.session === 'full';
+        return s.session === sessionFilter || s.session === 'full';
+      });
+
       const DAYS = ['M', 'T', 'W', 'R', 'F'];
       const START_H = 8, END_H = 22;
-      const SLOT_H = 32; // px per hour
+      const SLOT_H = 32;
 
       const totalH = END_H - START_H;
       const gridH = totalH * SLOT_H;
 
-      // Assign a colour per course (cycling through accent shades)
       const COLORS = ['#f5c518', '#1a5cff', '#ffffff', '#f5c518', '#1a5cff', '#ffffff'];
       const TEXT_COLORS = ['#0a0d1a', '#ffffff', '#0a0d1a', '#0a0d1a', '#ffffff', '#0a0d1a'];
       const colorMap = {};
       const uniqueNames = [...new Set(schedule.map(s => s.name))];
       uniqueNames.forEach((name, i) => { colorMap[name] = COLORS[i % COLORS.length]; });
 
-      // Build columns per day
       const cols = DAYS.map(day => {
-        const blocks = schedule.filter(s => s.days.includes(day) && s.start !== 0);
+        const blocks = filtered.filter(s => s.days.includes(day) && s.start !== 0);
         const blocksHtml = blocks.map(s => {
           const top = ((s.start / 60 - START_H) / totalH) * 100;
           const hpct = (((s.end - s.start) / 60) / totalH) * 100;
@@ -1751,23 +1869,23 @@
         return `<div style="position:relative;height:${gridH}px;background:var(--surface2);border-radius:4px">${blocksHtml}</div>`;
       });
 
-      // Hour labels
       const labels = [];
       for (let h = START_H; h <= END_H; h += 2) {
         const top = ((h - START_H) / totalH) * 100;
         labels.push(`<div style="position:absolute;top:${top.toFixed(1)}%;transform:translateY(-50%);right:4px;font-size:10px;color:var(--muted);font-family:var(--mono)">${h}:00</div>`);
       }
 
+      if (filtered.length === 0) {
+        return `<div style="text-align:center;padding:24px;color:var(--muted);font-family:var(--mono);font-size:12px">No scheduled courses in this session</div>`;
+      }
+
       return `
-    <div class="timetable-wrap">
-      <div class="timetable-label">Weekly view</div>
       <div style="display:grid;grid-template-columns:36px repeat(5,1fr);gap:4px;align-items:start">
         <div></div>
         ${DAYS.map(d => `<div style="text-align:center;font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:4px;letter-spacing:.06em">${DAY_FULL[d]}</div>`).join('')}
         <div style="position:relative;height:${gridH}px">${labels.join('')}</div>
         ${cols.join('')}
-      </div>
-    </div>`;
+      </div>`;
     }
 
     // ─────────────────────────────────────────────────────────────────────────────
