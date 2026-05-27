@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<!--[if lt IE 7 ]> <html class="ie ie6 no-js" dir="ltr" lang="en-US"> <![endif]-->
+<!--[if IE 7 ]>    <html class="ie ie7 no-js" dir="ltr" lang="en-US"> <![endif]-->
+<!--[if IE 8 ]>    <html class="ie ie8 no-js" dir="ltr" lang="en-US"> <![endif]-->
+<!--[if IE 9 ]>    <html class="ie9 no-js" dir="ltr" lang="en-US"> <![endif]-->
+<!--[if gt IE 9]><!--><html class="no-js" dir="ltr" lang="en-US"><!--<![endif]-->
+<!-- the "no-js" class is for Modernizr. -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<title>Course Search - Carleton University</title>
+<link rel="stylesheet" href="/css/ro/ro_course_search.css" type="text/css" media="screen"/>
+<!--[if lt IE 9]>
+<script src="https://html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+<![endif]-->
+</head>
+<body>
+<header class="centered">
+<div class="culogo">
+<h2>Registrar's Office</h2>
+</div> <!-- end culogo -->
+<div class="clear"></div>
+</header>
+<div class="banner">
+<h1>Search Results</h1>
+<div class="buttonsarea">
+<ul>
+<li class="redbutton"><a href="https://carleton.ca/registration/" target="_blank">How-To Video</a></li>
+<li class="redbutton"><a href="https://carleton.ca/registration/registration-steps/" target="_blank">User Guide</a></li>
+<li class="redbutton"><a href="http://calendar.carleton.ca/undergrad/" target="_blank">Undergrad Calendar</a></li>
+<li class="redbutton"><a href="http://calendar.carleton.ca/grad/" target="_blank">Graduate Calendar</a></li>
+</ul>
+</div>
+<div class="clear"></div>
+</div>
+<div class="bannerwrap">
+</div>
+<section class="containerfull centered">
+<section class="contentareafull">
+<script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js"></script>
+<script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.11.1/jquery-ui.min.js"></script>
+<link rel="stylesheet" href="https://ajax.googleapis.com/ajax/libs/jqueryui/1.11.1/themes/blitzer/jquery-ui.css">
+<SCRIPT LANGUAGE="JavaScript" TYPE="text/javascript">
+<!-- Hide JavaScript from older browsers
+$(document).ready(function() {
+$("#display_date").change(function () {
+$.ajax({type: "POST", 
+                       cache: false,
+                       url: "bwysched.p_time_table_generate",
+                       data: "pidm="+""+"&term_code="+$("#term_code").val()+"&session_id="+$("#session_id").val()+"&schd_start_date="+$("#display_date").val()+"&schd_num_weeks="+$("#num_weeks").val()+"&schd_block="+$("#show_block").val(), 
+                       success: function(data){$("#timetable").empty().append(data);}});
+});
+$("#num_weeks").change(function () {
+$.ajax({type: "POST", 
+                       cache: false,
+                       url: "bwysched.p_time_table_generate",
+                       data: "pidm="+""+"&term_code="+$("#term_code").val()+"&session_id="+$("#session_id").val()+"&schd_start_date="+$("#display_date").val()+"&schd_num_weeks="+$("#num_weeks").val()+"&schd_block="+$("#show_block").val(), 
+                       success: function(data){$("#timetable").empty().append(data);}});
+});
+$("#show_block").change(function () {
+$.ajax({type: "POST", 
+                       cache: false,
+                       url: "bwysched.p_time_table_generate",
+                       data: "pidm="+""+"&term_code="+$("#term_code").val()+"&session_id="+$("#session_id").val()+"&schd_start_date="+$("#display_date").val()+"&schd_num_weeks="+$("#num_weeks").val()+"&schd_block="+$("#show_block").val(), 
+                       success: function(data){$("#timetable").empty().append(data);}});
+});
+});
+//  End script hiding -->
+</SCRIPT>
+<form action="bwysched.p_list_sections_chk" method="post">
+</td>
+</tr>
+</table>
+<table cellspacing="0" cellpadding="0" border="0" width="900" style="font-size:12px;">
+<tr>
+<td><b>Registration Term:&nbsp</b>Fall 2025 (September-December)<br><br></td>
+</tr>
+<tr>
+<td>
+<ul> <li> Add a course to your <b> draft </b> worksheet by selecting the checkbox next to the course you want, then scroll to the bottom of the page and select <b> “Proceed to Worksheet”. </b> </li> <li> Additional course information (i.e. course description, restrictions and prerequisites) can be viewed by clicking on the <span style="color:blue"> blue </span> CRN, Subject or Course Title. </li> <li>Class locations are subject to change.</li>
+<br><br></td>
+</tr>
+<tr>
+<td>
+<table  CLASS="plaintable" summary="This layout table holds message information">
+<tr>
+<TD CLASS="pldefault">
+<img src="/wtlgifs/web_caution_cascade.png" alt="Caution" CLASS="headerImg" TITLE="Caution"  NAME="web_caution" HSPACE=0 VSPACE=0 BORDER=0 HEIGHT=12 WIDTH=13 />
+</TD>
+<TD CLASS="pldefault">
+<SPAN class="warningtext">No courses meet the search criteria</SPAN>
+<br />
+</TD>
+</tr>
+</table>
+</td>
+</tr>
+<input type="hidden" name="wsea_code" value="EXT" />
+<input type="hidden" name="term_code" value="202530" id=term_code />
+<input type="hidden" name="session_id" value="25165883" id=session_id />
+<input type="hidden" name="ws_numb" value="" />
+<input type="hidden" name="select_action" value="dummy" />
+<tr>
+<td><br><br>
+<input type="submit" value="Proceed to Worksheet" title="View my planned courses on my worksheet" />
+<input type="submit" name="search_selected" value="Return to Search" title="Go back to Search Course page" />
+<input type="submit" name="term_button" value="Change Term" title="Click to make a new term selection" />
+</td>
+</tr>
+</form>
+<tr>
+<td><br><br></td>
+</tr>
+<tr>
+<td>
+<table cellspacing="0" cellpadding="4" border="0" width="100%" style="font-size:12px;">
+<form action="" method="post">
+<tr>
+<td align="center" colspan="2" style="background-color:#000000; color:#FFFFFF;"><b>DRAFT TIMETABLE</b></td>
+</tr>
+<tr>
+<td style="border:solid 1px #D3D3D3;">
+<ul>
+<li>Classes begin on 03-SEP-2025 and end on 05-DEC-2025</li>
+<li>Courses that have scheduling <font color=#A60000>conflicts</font> will appear in red. University Regulations prohibit time conflicts</li><li>Allowed scheduling conflicts with TV or VOD (online) courses will appear in green.</li>
+</ul>
+</td>
+</tr>
+<tr>
+<td bgcolor="#B9B9B9" style="border:solid 1px #D3D3D3;" align="center">
+For the week starting:&nbsp;
+<select name="display_date" id="display_date">
+<option value="31-AUG-2025" selected>August    31, 2025</option>
+<option value="07-SEP-2025" >September 07, 2025</option>
+<option value="14-SEP-2025" >September 14, 2025</option>
+<option value="21-SEP-2025" >September 21, 2025</option>
+<option value="28-SEP-2025" >September 28, 2025</option>
+<option value="05-OCT-2025" >October   05, 2025</option>
+<option value="12-OCT-2025" >October   12, 2025</option>
+<option value="19-OCT-2025" >October   19, 2025</option>
+<option value="26-OCT-2025" >October   26, 2025</option>
+<option value="02-NOV-2025" >November  02, 2025</option>
+<option value="09-NOV-2025" >November  09, 2025</option>
+<option value="16-NOV-2025" >November  16, 2025</option>
+<option value="23-NOV-2025" >November  23, 2025</option>
+<option value="30-NOV-2025" >November  30, 2025</option>
+<option value="07-DEC-2025" >December  07, 2025</option>
+<option value="14-DEC-2025" >December  14, 2025</option>
+</select>
+&nbsp;&nbsp;&nbsp;&nbsp;Number of Weeks:&nbsp;
+<select name="num_weeks" id="num_weeks" style="width:50px">
+<option value="0" >0</option>
+<option value="1" selected>1</option>
+<option value="2" >2</option>
+<option value="3" >3</option>
+</select>
+<input type="hidden" name="show_block" value="N" />
+</td>
+<tr>
+<tr>
+<td style="border:solid 1px #D3D3D3;">
+<div id="timetable">
+<div class="infotextdiv"><table  CLASS="infotexttable" SUMMARY="This layout table contains information that may be helpful in understanding the content and functionality of this page.  It could be a brief set of instructions, a description of error messages, or other special information." role="complementary"><tr><td CLASS="indefault"><img src="/wtlgifs/web_caution_cascade.png" alt="Caution" CLASS="headerImg" TITLE="Caution"  NAME="web_caution" HSPACE=0 VSPACE=0 BORDER=0 HEIGHT=12 WIDTH=13 /></td><td CLASS="indefault"><SPAN class="infotext"> Descriptions of course delivery types listed in the Section Information are available on the <a href=https://carleton.ca/registration/course-delivery-types/" target="_blank"> Registrar’s Office website. </a> </p>
+
+<p>All times are Eastern Standard Time (EST), see individual course information for time commitment requirements.</p>
+
+<p>Please be advised that on December 5th, 2025 classes follow a Monday schedule. On April 8th, 2026 classes follow a Friday schedule. On June 18th, 2026 classes follow a Monday schedule. On August 14th, 2026 classes follow a Monday schedule.</p></SPAN></td></tr></table><p></DIV>
+<table width="100%" align="center" style="font-size:12px;">
+<tr>
+<td>
+<table width="90%" align="center" border="0" cellspacing="0" cellpadding="0" style="font-size:12px;">
+<tr><td align="left" colspan="8"><br><b>Week Starting:&nbsp;August    31, 2025</b></td></tr>
+<tr>
+<td style="background-color:#CCCCCC; font-size:12px;" width="9%"></td>
+<td align="center" style="background-color:#CCCCCC; font-size:12px;" width="13%">Sunday</td>
+<td align="center" style="background-color:#CCCCCC; font-size:12px;" width="13%"><font colour="blue">Labour&nbsp;Day</font></td>
+<td align="center" style="background-color:#CCCCCC; font-size:12px;" width="13%">Tuesday</td>
+<td align="center" style="background-color:#CCCCCC; font-size:12px;" width="13%">Wednesday</td>
+<td align="center" style="background-color:#CCCCCC; font-size:12px;" width="13%">Thursday</td>
+<td align="center" style="background-color:#CCCCCC; font-size:12px;" width="13%">Friday</td>
+<td align="center" style="background-color:#CCCCCC; font-size:12px;" width="13%">Saturday</td>
+</tr>
+</table>
+<br>
+</td>
+</tr>
+</table>
+</div>
+</td>
+<tr>
+</form>
+</table>
+</td>
+</tr>
+<tr>
+<td><br>
+
+<br><br></td>
+</tr>
+</table>
+</section>
+<div class="clear"></div>
+</section>
+<div class="footerwrapfull">
+</div>
+<footer>
+<div class="footerleft">
+<p><a href="#">Registrar's Office</a> &nbsp;|&nbsp; Tel: 613-520-3500 &nbsp;|&nbsp; Fax: 613-520-4410 <br/>
+300 Tory Building, 1125 Colonel By Drive, Ottawa, ON, Canada, K1S 5B6</p>
+</div>
+<div class="footerright">
+<p><br/>&copy; 2012 <a href="#">Carleton University</a></p>
+</div>
+<div class="clear"></div>
+</footer>
+</body>
+</html>

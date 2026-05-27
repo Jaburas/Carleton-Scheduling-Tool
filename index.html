@@ -5,6 +5,22 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Carleton Schedule Optimizer</title>
+  <!-- PDF.js CDN for client-side PDF text extraction -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+  <script>
+    // Asynchronously fetch the worker and load it via Blob URL to bypass browser CORS Web Worker restrictions
+    (async function() {
+      try {
+        const response = await fetch('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js');
+        const workerCode = await response.text();
+        const blob = new Blob([workerCode], { type: 'application/javascript' });
+        pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(blob);
+      } catch (e) {
+        console.warn("Failed to load PDF.js worker via Blob URL, trying direct fallback:", e);
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+      }
+    })();
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link
     href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Bangers&family=DM+Sans:wght@400;500&display=swap"
@@ -896,6 +912,36 @@
       display: block;
     }
 
+    .tree-upload-zone {
+      border: 2px dashed var(--border);
+      border-radius: 4px;
+      padding: 16px;
+      text-align: center;
+      cursor: pointer;
+      margin-bottom: 20px;
+      background: var(--surface2);
+      transition: all 0.2s ease;
+      user-select: none;
+      box-shadow: 3px 3px 0 var(--blue-dim);
+    }
+
+    .tree-upload-zone:hover {
+      border-color: var(--accent);
+      background: #15140a;
+      box-shadow: 3px 3px 0 var(--accent-dim);
+    }
+
+    .tree-upload-icon {
+      font-size: 20px;
+      margin-bottom: 6px;
+    }
+
+    .tree-upload-text {
+      font-size: 12px;
+      color: var(--muted);
+      font-family: var(--mono);
+    }
+
     .tree-selectors {
       display: flex;
       gap: 10px;
@@ -960,6 +1006,20 @@
       border-style: dashed;
       border-color: var(--blue);
       background: #0d1525;
+    }
+
+    .tree-course-item.not-offered {
+      opacity: 0.55;
+      cursor: not-allowed;
+      border-color: var(--border);
+    }
+
+    .tree-course-item.not-offered:hover {
+      border-color: var(--border) !important;
+    }
+
+    .tree-course-item.not-offered::after {
+      display: none !important;
     }
 
     .tree-check {
@@ -1193,13 +1253,20 @@
         <span class="tree-arrow">&#9660;</span>
       </button>
       <div class="tree-body">
+        <!-- PDF/JSON upload zone -->
+        <div class="tree-upload-zone" id="treeUploadZone" onclick="document.getElementById('treeUploadInput').click()">
+          <input type="file" id="treeUploadInput" accept=".pdf,.json" style="display:none" onchange="handleTreeUpload(event)">
+          <div class="tree-upload-icon">📂</div>
+          <div class="tree-upload-text">Upload Course Tree PDF or JSON</div>
+        </div>
+
         <div class="tree-selectors">
           <select class="tree-select" id="treeProgramSelect" onchange="renderTree()">
             <option value="">&#8212; Select program &#8212;</option>
             <option value="CSE">Computer Systems Engineering</option>
           </select>
           <select class="tree-select" id="treeYearSelect" onchange="renderTree()">
-            <option value="">&#8212; Select year &#8212;</option>
+            <option value="all">All Years</option>
             <option value="1">1st Year</option>
             <option value="2">2nd Year</option>
             <option value="3">3rd Year</option>
@@ -1226,26 +1293,24 @@
 
     <!-- How-to -->
     <div class="howto">
-      <strong>How to get your schedule file:</strong>
+      <strong>How to Use:</strong>
       <ol>
-        <li>Go to <strong>Carleton Central → Course Search</strong> and search for the courses you want.</li>
-        <li>On the results page, press <code>Ctrl+S</code> (or <code>Cmd+S</code> on Mac) and save as <strong>Webpage,
-            Complete</strong>.</li>
-        <li>Upload the saved <code>.html</code> file below.</li>
+        <li>Select your <strong>term</strong> (Fall or Winter) below.</li>
+        <li>Type your desired courses in the search bar!</li>
+        <li>Set your preferences and hit <strong>Optimize</strong>.</li>
       </ol>
     </div>
 
-    <!-- Step 1: Upload -->
+    <!-- Step 1: Select Term -->
     <div class="step">
-      <div class="step-label"><span class="step-num">1</span> Upload your schedule file</div>
-      <div class="upload-zone" id="uploadZone">
-        <input type="file" id="fileInput" accept=".html,.htm">
-        <div class="upload-icon">⬆</div>
-        <p><strong>Click to upload</strong> or drag & drop<br>Your saved Carleton course search <code>.html</code> file
-        </p>
+      <div class="step-label"><span class="step-num">1</span> Select Term</div>
+      <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap" id="termBtnRow"></div>
+      <div class="upload-zone loaded" id="uploadZone" style="cursor: default">
+        <div class="upload-icon" style="color:var(--accent)">☁</div>
+        <p><strong id="dbStatus">Loading database...</strong><br>Fetching latest course information</p>
         <div class="file-name" id="fileName"></div>
       </div>
-      <div class="course-count" id="courseCount"></div>
+      <div class="course-count show" id="courseCount"></div>
     </div>
 
 
@@ -1280,15 +1345,8 @@
         <div class="pref-card" id="pref-dayoff" onclick="togglePref('dayoff')">
           <div class="pref-icon">☀︎</div>
           <div class="pref-title">Day off</div>
-          <div class="pref-desc">Keep a full weekday free</div>
+          <div class="pref-desc">Keep at least one weekday free</div>
         </div>
-      </div>
-      <div class="day-picker" id="dayPicker">
-        <button class="day-btn" data-day="M" onclick="selectDay(this)">Mon</button>
-        <button class="day-btn" data-day="T" onclick="selectDay(this)">Tue</button>
-        <button class="day-btn" data-day="W" onclick="selectDay(this)">Wed</button>
-        <button class="day-btn" data-day="R" onclick="selectDay(this)">Thu</button>
-        <button class="day-btn" data-day="F" onclick="selectDay(this)">Fri</button>
       </div>
     </div>
 
@@ -1308,13 +1366,15 @@
     // Data
     // ─────────────────────────────────────────────────────────────────────────────
     let allCourses = {};   // { "ECOR 2050": [sectionObj, ...] }
+    let rawDatabase = null; // raw courses.json data
+    let selectedTermCode = null; // currently selected term code
     let wishlist = [];   // ["ECOR 2050", ...]
-    let prefs = { gaps: false, early: false, dayoff: false, dayCode: null };
+    let prefs = { gaps: false, early: false, dayoff: false };
     let allResults = [];
     let resultIdx = 0;
     let currentTTSession = 0;  // index into SESSION_ORDER for timetable view
-    const SESSION_ORDER = ['early', 'late', 'full'];
-    const SESSION_LABELS = { early: '☀ Early Summer', late: '🌙 Late Summer', full: '📅 Full Summer' };
+    const SESSION_ORDER = ['full'];
+    const SESSION_LABELS = { full: '📅 Full Term' };
 
     const DAY_MAP = { M: 'Monday', T: 'Tuesday', W: 'Wednesday', R: 'Thursday', F: 'Friday' };
     const DAY_FULL = { M: 'Mon', T: 'Tue', W: 'Wed', R: 'Thu', F: 'Fri' };
@@ -1337,207 +1397,128 @@
       return raw.trim().split(/\s+/).map(t => map[t.toLowerCase()]).filter(Boolean);
     }
 
-    // Classify a section into early/late/full summer based on its meeting dates
+    // All sections are classified as 'full' for Fall/Winter terms
     function classifySession(dateStr) {
-      if (!dateStr) return 'full';
-      const parts = dateStr.match(/^(.+?)\s+to\s+(.+)$/);
-      if (!parts) return 'full';
-      const startDate = new Date(parts[1]);
-      const endDate = new Date(parts[2]);
-      if (isNaN(startDate) || isNaN(endDate)) return 'full';
-      const julyFirst = new Date(startDate.getFullYear(), 6, 1);
-      if (endDate < julyFirst) return 'early';
-      if (startDate >= julyFirst) return 'late';
       return 'full';
     }
 
-    function parseHTML(html) {
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(html, 'text/html');
-      const data = {};
-
-      const TARGET = ['#c0c0c0', '#dcdcdc'];
-      const rows = [...doc.querySelectorAll('tr[bgcolor]')];
-
-      rows.forEach(row => {
-        const bg = row.getAttribute('bgcolor').toLowerCase();
-        if (!TARGET.includes(bg)) return;
-
-        const cols = row.querySelectorAll('td');
-        if (cols.length <= 10) return;   // time/info rows have fewer cols
-
-        const name = cols[3].textContent.trim();
-        if (!name) return;
-
-        const letter = cols[4].textContent.trim();
-        const type = cols[7].textContent.trim();
-        const crn = cols[2].textContent.trim();
-
-        // next sibling tr has the time
-        let timeRow = row.nextElementSibling;
-        if (!timeRow) return;
-        const txt = timeRow.textContent;
-
-        // Extract meeting date for session classification
-        const dateMatch = txt.match(/Meeting Date:\s*(.+?)\s*Days:/);
-        const dateRange = dateMatch ? dateMatch[1].trim() : '';
-        const session = classifySession(dateRange);
-
-        const dayMatch = txt.match(/Days:\s*(.*?)\s*Time:/);
-        const timeMatch = txt.match(/Time:\s*(\d{2}:\d{2})\s*-\s*(\d{2}:\d{2})/);
-        if (!dayMatch || !timeMatch) {
-          // Unscheduled/async course — no time so it never conflicts
-          if (!data[name]) data[name] = [];
-          data[name].push({ name, letter, type, crn, days: [], start: 0, end: 0, session });
-          return;
-        }
-
-        const days = parseDays(dayMatch[1]);
-        if (!days.length) return;
-
-        const section = {
-          name, letter, type, crn, days,
-          start: toMinutes(timeMatch[1]),
-          end: toMinutes(timeMatch[2]),
-          session,
-        };
-
-        if (!data[name]) data[name] = [];
-        data[name].push(section);
-      });
-
-      return data;
-    }
-
     // ─────────────────────────────────────────────────────────────────────────────
-    // Conflict detection & schedule finding
+    // Database Fetching & Initialization
     // ─────────────────────────────────────────────────────────────────────────────
-    function sessionsOverlap(sa, sb) {
-      if (sa === 'early' && sb === 'late') return false;
-      if (sa === 'late' && sb === 'early') return false;
-      return true;
-    }
+    document.addEventListener("DOMContentLoaded", fetchDatabase);
 
-    function overlaps(a, b) {
-      if (!sessionsOverlap(a.session, b.session)) return false;
-      const common = a.days.filter(d => b.days.includes(d));
-      if (!common.length) return false;
-      return a.start < b.end && a.end > b.start;
-    }
+    async function fetchDatabase() {
+      const dbStatus = document.getElementById('dbStatus');
+      const cc = document.getElementById('courseCount');
+      const uploadZone = document.getElementById('uploadZone');
 
-    function conflictsWithSchedule(section, schedule) {
-      return schedule.some(s => overlaps(section, s));
-    }
+      try {
+        const res = await fetch('data/courses.json');
+        if (!res.ok) throw new Error("HTTP " + res.status);
 
-    // Group a course's sections by type, return all valid combos of one-per-type.
-    // e.g. ELEC 2501 has 1 Lecture, 2 Labs, 2 PAs → combos of [Lec + one Lab + one PA]
-    // that don't conflict internally.
-    function getCourseTypeCombos(sections) {
-      const byType = {};
-      sections.forEach(s => { (byType[s.type] = byType[s.type] || []).push(s); });
-      const types = Object.values(byType);
+        rawDatabase = await res.json();
+        const terms = Object.keys(rawDatabase);
+        if (terms.length === 0) throw new Error("Database is empty");
 
-      function cartesian(lists, current) {
-        if (lists.length === 0) return [current];
-        const results = [];
-        for (const s of lists[0]) {
-          if (!current.some(c => overlaps(c, s))) {
-            cartesian(lists.slice(1), [...current, s]).forEach(r => results.push(r));
-          }
-        }
-        return results;
+        // Build term selector buttons (exclude summer)
+        const termBtnRow = document.getElementById('termBtnRow');
+        const fallWinterTerms = terms.filter(tc => {
+          const name = rawDatabase[tc].term_name.toLowerCase();
+          return name.includes('fall') || name.includes('winter');
+        });
+
+        if (fallWinterTerms.length === 0) throw new Error("No Fall/Winter terms found");
+
+        termBtnRow.innerHTML = fallWinterTerms.map(tc => {
+          const t = rawDatabase[tc];
+          const icon = t.term_name.toLowerCase().includes('fall') ? '🍂' : '❄️';
+          return `<button class="btn btn-ghost" style="flex:1;min-width:140px;font-size:15px;padding:14px 18px;font-family:var(--display);letter-spacing:.05em" id="termBtn-${tc}" onclick="selectTerm('${tc}')">${icon} ${t.term_name}</button>`;
+        }).join('');
+
+        dbStatus.style.color = "var(--accent)";
+        dbStatus.innerHTML = "Database Connected";
+        uploadZone.querySelector('p').innerHTML = `<strong style="color:var(--accent)">Database Connected</strong><br>Select a term above to get started.`;
+        cc.innerHTML = `<span style="color:var(--muted)">Choose a term to load courses.</span>`;
+
+      } catch (err) {
+        console.error(err);
+        dbStatus.style.color = "var(--red)";
+        dbStatus.innerHTML = "Database Error";
+        uploadZone.querySelector('p').innerHTML = `<strong style="color:var(--red)">Connection Failed</strong><br>Run scraper to generate courses.json`;
+        uploadZone.style.borderColor = "var(--red)";
+        cc.innerHTML = `<span style="color:var(--red)">Failed to load data.</span>`;
       }
-      return cartesian(types, []);
     }
 
-    // courseLists: one array of sections per chosen course.
-    // For each course we first compute all valid type-combos (Lecture+Lab+PA etc),
-    // then find all cross-course combinations with no conflicts.
-    function findAllSchedules(courseLists) {
-      const courseTypeCombos = courseLists.map(sections => getCourseTypeCombos(sections));
+    function selectTerm(termCode) {
+      selectedTermCode = termCode;
+      allCourses = {};
+      wishlist = [];
+      allResults = [];
+      resultIdx = 0;
+      document.getElementById('results').innerHTML = '';
+      renderChips();
+      updateRunBtn();
 
-      function recurse(idx, current) {
-        if (idx === courseTypeCombos.length) return [current];
-        const results = [];
-        for (const combo of courseTypeCombos[idx]) {
-          if (!combo.some(s => conflictsWithSchedule(s, current))) {
-            recurse(idx + 1, [...current, ...combo]).forEach(r => results.push(r));
-          }
+      const termData = rawDatabase[termCode];
+      for (const courseName in termData.courses) {
+        if (!allCourses[courseName]) allCourses[courseName] = [];
+        for (const sec of termData.courses[courseName]) {
+          const secData = {
+            name: sec.name,
+            letter: sec.section,
+            type: sec.type,
+            crn: sec.crn,
+            days: sec.days,
+            start: toMinutes(sec.startTime),
+            end: toMinutes(sec.endTime),
+            session: classifySession(sec.dateRange)
+          };
+          const isDup = allCourses[courseName].some(existing =>
+            existing.crn === secData.crn &&
+            existing.start === secData.start &&
+            existing.end === secData.end
+          );
+          if (!isDup) allCourses[courseName].push(secData);
         }
-        return results;
       }
-      return recurse(0, []);
-    }
 
-    // ─────────────────────────────────────────────────────────────────────────────
-    // Filtering & scoring
-    // ─────────────────────────────────────────────────────────────────────────────
-    function scoreGaps(schedule) {
-      const byDay = {};
-      schedule.forEach(s => s.days.forEach(d => {
-        (byDay[d] = byDay[d] || []).push([s.start, s.end]);
-      }));
-      let total = 0;
-      Object.values(byDay).forEach(slots => {
-        slots.sort((a, b) => a[0] - b[0]);
-        for (let i = 1; i < slots.length; i++) {
-          const gap = slots[i][0] - slots[i - 1][1];
-          if (gap > 0) total += gap;
-        }
+      const totalCourses = Object.keys(allCourses).length;
+      const courseInput = document.getElementById('courseInput');
+      const addBtn = document.getElementById('addBtn');
+      courseInput.disabled = false;
+      addBtn.disabled = false;
+      courseInput.value = '';
+
+      const cc = document.getElementById('courseCount');
+      cc.innerHTML = `Loaded <strong>${totalCourses}</strong> courses from <strong>${termData.term_name}</strong>.`;
+
+      const uploadZone = document.getElementById('uploadZone');
+      uploadZone.querySelector('p').innerHTML = `<strong style="color:var(--accent)">${termData.term_name}</strong><br>${termData.course_count} courses · ${termData.section_count} sections`;
+
+      // Highlight selected button
+      document.querySelectorAll('[id^="termBtn-"]').forEach(b => {
+        b.classList.remove('active');
+        b.style.background = '';
+        b.style.color = '';
+        b.style.borderColor = '';
+        b.style.boxShadow = '';
       });
-      return total;
-    }
+      const activeBtn = document.getElementById('termBtn-' + termCode);
+      if (activeBtn) {
+        activeBtn.style.background = 'var(--accent)';
+        activeBtn.style.color = 'var(--bg)';
+        activeBtn.style.borderColor = '#8a6a00';
+        activeBtn.style.boxShadow = '3px 3px 0 #8a6a00';
+      }
 
-    function hasDayOff(schedule, day) {
-      return !schedule.some(s => s.days.includes(day));
-    }
-
-    function hasNoEarly(schedule) {
-      return schedule.every(s => s.start >= EARLY_MIN);
-    }
-
-    function applyFilters(results, p) {
-      let filtered = results;
-      if (p.dayoff && p.dayCode) filtered = filtered.filter(r => hasDayOff(r, p.dayCode));
-      if (p.early) filtered = filtered.filter(r => hasNoEarly(r));
-      if (p.gaps) filtered = [...filtered].sort((a, b) => scoreGaps(a) - scoreGaps(b));
-      return filtered;
-    }
-
-    // ─────────────────────────────────────────────────────────────────────────────
-    // Upload
-    // ─────────────────────────────────────────────────────────────────────────────
-    const uploadZone = document.getElementById('uploadZone');
-    const fileInput = document.getElementById('fileInput');
-
-    uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag'); });
-    uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag'));
-    uploadZone.addEventListener('drop', e => {
-      e.preventDefault();
-      uploadZone.classList.remove('drag');
-      handleFile(e.dataTransfer.files[0]);
-    });
-    fileInput.addEventListener('change', () => handleFile(fileInput.files[0]));
-
-    function handleFile(file) {
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = e => {
-        allCourses = parseHTML(e.target.result);
-        const count = Object.keys(allCourses).length;
-        uploadZone.classList.add('loaded');
-        document.getElementById('fileName').textContent = '✓ ' + file.name;
-        const cc = document.getElementById('courseCount');
-        cc.classList.add('show');
-        cc.innerHTML = count > 0
-          ? `Found <strong>${count}</strong> courses available to schedule.`
-          : `<span style="color:var(--red)">No courses found — make sure you saved the right page.</span>`;
-        if (count > 0) {
-          document.getElementById('courseInput').disabled = false;
-          document.getElementById('addBtn').disabled = false;
-        }
-      };
-      reader.readAsText(file);
+      // Auto-update uploader semester dropdown to match selected term type and refresh grid
+      const treeSemSelect = document.getElementById('treeSemSelect');
+      if (treeSemSelect && rawDatabase[termCode]) {
+        const name = rawDatabase[termCode].term_name.toLowerCase();
+        treeSemSelect.value = name.includes('fall') ? 'F' : 'W';
+      }
+      renderTree();
     }
 
     // ─────────────────────────────────────────────────────────────────────────────
@@ -1639,21 +1620,156 @@
     }
 
     // ─────────────────────────────────────────────────────────────────────────────
+    // Conflict detection & schedule finding
+    // ─────────────────────────────────────────────────────────────────────────────
+    function sessionsOverlap(sa, sb) {
+      if (sa === 'early' && sb === 'late') return false;
+      if (sa === 'late' && sb === 'early') return false;
+      return true;
+    }
+
+    function overlaps(a, b) {
+      if (!sessionsOverlap(a.session, b.session)) return false;
+      const common = a.days.filter(d => b.days.includes(d));
+      if (!common.length) return false;
+      return a.start < b.end && a.end > b.start;
+    }
+
+    function conflictsWithSchedule(section, schedule) {
+      return schedule.some(s => overlaps(section, s));
+    }
+
+    function getCourseTypeCombos(sections) {
+      const byType = {};
+      sections.forEach(s => { (byType[s.type] = byType[s.type] || []).push(s); });
+      const types = Object.values(byType);
+
+      function cartesian(lists, current) {
+        if (lists.length === 0) return [current];
+        const results = [];
+        for (const s of lists[0]) {
+          if (!current.some(c => overlaps(c, s))) {
+            cartesian(lists.slice(1), [...current, s]).forEach(r => results.push(r));
+          }
+        }
+        return results;
+      }
+      return cartesian(types, []);
+    }
+
+    function findAllSchedules(courseLists) {
+      const courseTypeCombos = courseLists.map(sections => getCourseTypeCombos(sections));
+
+      function recurse(idx, current) {
+        if (idx === courseTypeCombos.length) return [current];
+        const results = [];
+        for (const combo of courseTypeCombos[idx]) {
+          if (!combo.some(s => conflictsWithSchedule(s, current))) {
+            recurse(idx + 1, [...current, ...combo]).forEach(r => results.push(r));
+          }
+        }
+        return results;
+      }
+      return recurse(0, []);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Filtering & scoring
+    // ─────────────────────────────────────────────────────────────────────────────
+    function getGapsPerDay(schedule) {
+      const byDay = {};
+      schedule.forEach(s => s.days.forEach(d => {
+        (byDay[d] = byDay[d] || []).push([s.start, s.end]);
+      }));
+      const gaps = {};
+      Object.entries(byDay).forEach(([day, slots]) => {
+        slots.sort((a, b) => a[0] - b[0]);
+        let dayGap = 0;
+        for (let i = 1; i < slots.length; i++) {
+          const gap = slots[i][0] - slots[i - 1][1];
+          if (gap > 0) dayGap += gap;
+        }
+        if (dayGap > 0) {
+          gaps[day] = dayGap;
+        }
+      });
+      return gaps;
+    }
+
+    function formatGapsPerDay(gaps) {
+      const days = ['M', 'T', 'W', 'R', 'F'];
+      const parts = [];
+      days.forEach(d => {
+        if (gaps[d]) {
+          const gap = gaps[d];
+          const h = Math.floor(gap / 60);
+          const m = gap % 60;
+          const timeStr = h > 0 ? `${h}h${m > 0 ? ` ${m}m` : ''}` : `${m}m`;
+          parts.push(`${DAY_FULL[d]}: ${timeStr}`);
+        }
+      });
+      return parts.length > 0 ? parts.join(', ') : 'none';
+    }
+
+    function scoreSchedule(schedule, p) {
+      let score = 0;
+      const daysUsed = [...new Set(schedule.flatMap(s => s.days))];
+      const weekdaysOff = ['M', 'T', 'W', 'R', 'F'].filter(d => !daysUsed.includes(d));
+
+      if (p.dayoff) {
+        if (weekdaysOff.length > 0) {
+          score += 1000;
+          score += weekdaysOff.length * 100;
+        }
+      } else {
+        score += weekdaysOff.length * 10;
+      }
+
+      let earlyClasses = 0;
+      schedule.forEach(s => {
+        if (s.start !== 0 && s.start < EARLY_MIN) {
+          earlyClasses++;
+        }
+      });
+
+      if (p.early) {
+        if (earlyClasses === 0) {
+          score += 1000;
+        } else {
+          score -= earlyClasses * 500;
+        }
+      } else {
+        score -= earlyClasses * 10;
+      }
+
+      const gaps = getGapsPerDay(schedule);
+      let totalGapMinutes = 0;
+      let daysWithGaps = 0;
+
+      Object.values(gaps).forEach(gapMin => {
+        if (gapMin > 0) {
+          totalGapMinutes += gapMin;
+          daysWithGaps++;
+        }
+      });
+
+      if (p.gaps) {
+        score -= totalGapMinutes * 2;
+        score -= daysWithGaps * 200;
+      } else {
+        score -= totalGapMinutes * 0.5;
+        score -= daysWithGaps * 20;
+      }
+
+      return score;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
     // Preferences
     // ─────────────────────────────────────────────────────────────────────────────
     function togglePref(key) {
       prefs[key] = !prefs[key];
       document.getElementById('pref-' + key).classList.toggle('active', prefs[key]);
-      if (key === 'dayoff') {
-        document.getElementById('dayPicker').classList.toggle('show', prefs.dayoff);
-        if (!prefs.dayoff) prefs.dayCode = null;
-      }
-    }
-
-    function selectDay(btn) {
-      document.querySelectorAll('.day-btn').forEach(b => b.classList.remove('selected'));
-      btn.classList.add('selected');
-      prefs.dayCode = btn.dataset.day;
     }
 
     function updateRunBtn() {
@@ -1673,14 +1789,30 @@
         return;
       }
 
-      let filtered = applyFilters(raw, prefs);
+      // Score and sort all schedules
+      const scored = raw.map(schedule => ({
+        schedule,
+        score: scoreSchedule(schedule, prefs)
+      }));
+      scored.sort((a, b) => b.score - a.score);
+
+      // Limit to top 10 different schedules
+      const topResults = scored.slice(0, 10).map(item => item.schedule);
+
+      // Detect if we fell back (if active preferences are violated in the top schedule)
       let fallback = false;
-      if (!filtered.length) {
-        filtered = [...raw].sort((a, b) => scoreGaps(a) - scoreGaps(b));
-        fallback = true;
+      if (topResults.length > 0) {
+        const best = topResults[0];
+        const daysUsed = [...new Set(best.flatMap(s => s.days))];
+        const weekdaysOff = ['M', 'T', 'W', 'R', 'F'].filter(d => !daysUsed.includes(d));
+        const hasEarly = best.some(s => s.start !== 0 && s.start < EARLY_MIN);
+
+        if ((prefs.dayoff && weekdaysOff.length === 0) || (prefs.early && hasEarly)) {
+          fallback = true;
+        }
       }
 
-      allResults = filtered;
+      allResults = topResults;
       resultIdx = 0;
       renderResults(fallback, raw.length);
     }
@@ -1691,13 +1823,13 @@
     function renderResults(fallback, totalRaw) {
       const schedule = allResults[resultIdx];
       const total = allResults.length;
-      const gap = scoreGaps(schedule);
-      const gapStr = gap === 0 ? 'none' : `${Math.floor(gap / 60)}h ${gap % 60}m`;
+      const gaps = getGapsPerDay(schedule);
+      const gapStr = formatGapsPerDay(gaps);
       const daysUsed = [...new Set(schedule.flatMap(s => s.days))];
       const daysOff = ['M', 'T', 'W', 'R', 'F'].filter(d => !daysUsed.includes(d));
 
       const fallbackHtml = fallback
-        ? `<div class="msg msg-warn" style="margin-bottom:20px">No schedules matched all your preferences — showing best available instead.</div>`
+        ? `<div class="msg msg-warn" style="margin-bottom:20px">Could not fully satisfy all preferences — showing the best matches.</div>`
         : '';
 
       // Group sections by course name for display
@@ -1729,7 +1861,7 @@
           <div>
             <div style="font-family:var(--mono);font-size:11px;color:var(--muted);
               text-transform:uppercase;letter-spacing:.07em;margin-bottom:5px">
-              ${s.type}  <span style="color:var(--border)">·</span>  ${s.letter}  <span style="color:var(--border)">·</span>  <span style="color:${s.session === 'early' ? '#4ade80' : s.session === 'late' ? '#f97316' : 'var(--blue)'}">${s.session === 'early' ? '☀ Early' : s.session === 'late' ? '🌙 Late' : '📅 Full'}</span>
+              ${s.type}  <span style="color:var(--border)">·</span>  ${s.letter}
             </div>
             <div class="card-days">${dayPips}</div>
           </div>
@@ -1757,11 +1889,19 @@
       <button class="btn btn-ghost" onclick="navigate(1)" ${resultIdx === total - 1 ? 'disabled' : ''}>Next →</button>
     </div>` : '';
 
+      const isTop5 = resultIdx < 5;
+      const rankBadge = isTop5
+        ? `<span style="background:var(--accent);color:var(--bg);padding:3px 8px;border-radius:3px;font-size:11px;font-family:var(--display);text-transform:uppercase;font-weight:bold;box-shadow:2px 2px 0 var(--accent-dim);letter-spacing:.05em;text-shadow:none">★ Top 5 Choice</span>`
+        : '';
+
       document.getElementById('results').innerHTML = `
     ${fallbackHtml}
     <div class="results-header">
-      <div class="results-title">Your Schedule</div>
-      <div class="results-meta">${total} combination${total !== 1 ? 's' : ''} found</div>
+      <div class="results-title" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <span>Best Match #${resultIdx + 1}</span>
+        ${rankBadge}
+      </div>
+      <div class="results-meta">${resultIdx + 1} of ${total} best matches</div>
     </div>
     ${navHtml}
     <div class="stats-bar">
@@ -1770,8 +1910,8 @@
         <div class="stat-label">Courses</div>
       </div>
       <div class="stat">
-        <div class="stat-val">${gapStr}</div>
-        <div class="stat-label">Total gaps</div>
+        <div class="stat-val" style="font-size:13px;line-height:1.5">${gapStr}</div>
+        <div class="stat-label">Gaps by day</div>
       </div>
       <div class="stat">
         <div class="stat-val">${daysOff.length ? daysOff.map(d => DAY_FULL[d]).join(', ') : '—'}</div>
@@ -1850,8 +1990,8 @@
       const totalH = END_H - START_H;
       const gridH = totalH * SLOT_H;
 
-      const COLORS = ['#f5c518', '#1a5cff', '#ffffff', '#f5c518', '#1a5cff', '#ffffff'];
-      const TEXT_COLORS = ['#0a0d1a', '#ffffff', '#0a0d1a', '#0a0d1a', '#ffffff', '#0a0d1a'];
+      const COLORS = ['#f5c518', '#1a5cff', '#4ade80', '#f97316', '#a78bfa', '#ec4899'];
+      const TEXT_COLORS = ['#0a0d1a', '#ffffff', '#0a0d1a', '#0a0d1a', '#0a0d1a', '#0a0d1a'];
       const colorMap = {};
       const uniqueNames = [...new Set(schedule.map(s => s.name))];
       uniqueNames.forEach((name, i) => { colorMap[name] = COLORS[i % COLORS.length]; });
@@ -1971,54 +2111,371 @@
           },
         },
       },
-      // ── Add more programs here ──
-      // SOFTENG: { name: "Software Engineering", years: { ... } },
     };
 
     // ─────────────────────────────────────────────────────────────────────────────
-    // Course Tree UI
+    // Course Tree UI & Parsing
     // ─────────────────────────────────────────────────────────────────────────────
     let treeSelections = new Set();
+
+    document.addEventListener("DOMContentLoaded", () => {
+      populateProgramSelect();
+    });
 
     function toggleTree() {
       document.getElementById('treePanel').classList.toggle('open');
     }
 
+    function populateProgramSelect() {
+      const select = document.getElementById('treeProgramSelect');
+      const currentVal = select.value;
+      let html = '<option value="">&#8212; Select program &#8212;</option>';
+      Object.entries(COURSE_TREE).forEach(([code, data]) => {
+        html += `<option value="${code}">${data.name}</option>`;
+      });
+      select.innerHTML = html;
+      select.value = currentVal;
+    }
+
+    function handleTreeUpload(event) {
+      if (!selectedTermCode) {
+        alert("Please select your term (Fall/Winter) in Step 1 before uploading your course tree.");
+        event.target.value = ''; // Clear file input
+        return;
+      }
+
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const note = document.getElementById('treeNote');
+      note.textContent = "Loading file...";
+      note.style.color = "";
+
+      const reader = new FileReader();
+      if (file.name.endsWith('.pdf')) {
+        reader.onload = async function(e) {
+          try {
+            const arrayBuffer = e.target.result;
+            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            
+            const courseMap = [];
+            for (let i = 1; i <= pdf.numPages; i++) {
+              const page = await pdf.getPage(i);
+              const content = await page.getTextContent();
+              content.items.forEach(item => {
+                // Find all matches globally in this text element to catch grouped course codes
+                const matches = item.str.match(/\b[A-Z]{4}\s*\d{4}\b/g);
+                if (matches) {
+                  matches.forEach(m => {
+                    // Standardize code to have exactly one space (e.g. "MATH 1004")
+                    const normalized = m.toUpperCase().replace(/\s+/g, '').replace(/^([A-Z]{4})(\d{4})$/, '$1 $2');
+                    courseMap.push({
+                      code: normalized,
+                      x: item.transform[4],
+                      srcLength: item.str.trim().length
+                    });
+                  });
+                }
+              });
+            }
+
+            if (courseMap.length === 0) {
+              alert("No Carleton course codes (e.g. MATH 1004) found in the PDF.");
+              note.textContent = "Parsing failed.";
+              return;
+            }
+
+            // Get unique codes. If a code exists multiple times, keep the one with
+            // the shortest source text string (this chooses grid boxes over descriptions/notes).
+            const uniqueCourses = {};
+            courseMap.forEach(item => {
+              const existing = uniqueCourses[item.code];
+              if (!existing || item.srcLength < existing.srcLength) {
+                uniqueCourses[item.code] = { x: item.x, srcLength: item.srcLength };
+              }
+            });
+            const codesWithX = Object.entries(uniqueCourses).map(([code, data]) => ({ code, x: data.x, srcLength: data.srcLength }));
+
+            // Only use standalone course codes (grid boxes) to compute visual columns
+            const gridCourses = codesWithX.filter(c => c.srcLength < 15);
+            const xCoords = gridCourses.map(c => c.x).sort((a, b) => a - b);
+            
+            // Cluster X coordinates to find exact column positions
+            const colClusters = [];
+            xCoords.forEach(x => {
+              let addedToCluster = false;
+              for (let cluster of colClusters) {
+                const avg = cluster.reduce((sum, val) => sum + val, 0) / cluster.length;
+                if (Math.abs(x - avg) < 25) { // 25px tolerance is safe for column widths
+                  cluster.push(x);
+                  addedToCluster = true;
+                  break;
+                }
+              }
+              if (!addedToCluster) {
+                colClusters.push([x]);
+              }
+            });
+
+            // Sort column clusters from left to right
+            const sortedClusters = colClusters
+              .map(cluster => ({
+                avg: cluster.reduce((sum, val) => sum + val, 0) / cluster.length,
+                count: cluster.length
+              }))
+              .sort((a, b) => a.avg - b.avg);
+
+            console.log("Detected PDF column clusters: ", sortedClusters);
+
+            const xVals = gridCourses.length > 0 ? gridCourses.map(c => c.x) : codesWithX.map(c => c.x);
+            const minX = Math.min(...xVals);
+            const maxX = Math.max(...xVals);
+            const width = maxX - minX;
+
+            const pdfTree = {
+              name: "Uploaded PDF Course List",
+              years: {
+                1: { F: [], W: [] },
+                2: { F: [], W: [] },
+                3: { F: [], W: [] },
+                4: { F: [], W: [] }
+              }
+            };
+
+            // Grid mapping: if we found horizontal spread, map elements
+            if (width > 200) {
+              // Estimate base column width from adjacent differences of clusters
+              const diffs = [];
+              for (let i = 1; i < sortedClusters.length; i++) {
+                diffs.push(sortedClusters[i].avg - sortedClusters[i-1].avg);
+              }
+              let colWidth = 100; // default fallback
+              if (diffs.length > 0) {
+                const minDiff = Math.min(...diffs);
+                // Filter to differences that are within 1.5x of the minimum difference
+                const closeToMin = diffs.filter(d => d < minDiff * 1.5);
+                colWidth = closeToMin.reduce((sum, val) => sum + val, 0) / closeToMin.length;
+              }
+
+              const firstColumnX = sortedClusters[0].avg;
+              console.log(`Grid detection: firstColumnX = ${firstColumnX}, colWidth = ${colWidth}`);
+
+              codesWithX.forEach(item => {
+                // Map directly to grid index using the calculated column width relative to first column
+                const colIndex = Math.round((item.x - firstColumnX) / colWidth);
+
+                // Skip courses that fall into Column 9+ (Notes/Prerequisites on the right)
+                if (colIndex >= 8) {
+                  console.log(`Skipping course ${item.code} at X=${item.x} (colIndex=${colIndex}, likely Notes column)`);
+                  return;
+                }
+
+                // Restrict to valid range [0, 7]
+                const safeColIndex = Math.max(0, colIndex);
+
+                const year = Math.min(4, Math.max(1, Math.floor(safeColIndex / 2) + 1));
+                const sem = safeColIndex % 2 === 0 ? 'F' : 'W';
+
+                pdfTree.years[year][sem].push({
+                  code: item.code,
+                  name: getCourseNameFromDb(item.code)
+                });
+              });
+            } else {
+              // Fallback for vertical list: place in both Fall/Winter and group by first digit
+              codesWithX.forEach(item => {
+                const numPart = item.code.split(' ')[1];
+                if (!numPart) return;
+                const firstDigit = numPart[0];
+                const year = ['1', '2', '3', '4'].includes(firstDigit) ? parseInt(firstDigit) : null;
+                if (!year) return;
+
+                const entry = { code: item.code, name: getCourseNameFromDb(item.code) };
+                pdfTree.years[year].F.push(entry);
+                pdfTree.years[year].W.push(entry);
+              });
+            }
+
+            COURSE_TREE["PDF"] = pdfTree;
+            populateProgramSelect();
+            document.getElementById('treeProgramSelect').value = "PDF";
+            document.getElementById('treeYearSelect').value = "all"; // Default to All Years for PDF
+            
+            // Auto-select semester based on term selector
+            if (selectedTermCode) {
+              const name = rawDatabase[selectedTermCode].term_name.toLowerCase();
+              document.getElementById('treeSemSelect').value = name.includes('fall') ? 'F' : 'W';
+            } else {
+              document.getElementById('treeSemSelect').value = 'F';
+            }
+
+            renderTree();
+
+            note.textContent = `PDF parsed: ${codesWithX.length} courses extracted!`;
+            note.style.color = "var(--accent)";
+
+          } catch (err) {
+            console.error(err);
+            alert("Error parsing PDF file: " + err.message);
+            note.textContent = "Parsing failed.";
+          }
+        };
+        reader.readAsArrayBuffer(file);
+      } else if (file.name.endsWith('.json')) {
+        reader.onload = function(e) {
+          try {
+            const data = JSON.parse(e.target.result);
+            let valid = true;
+            for (const key in data) {
+              if (typeof data[key] !== 'object' || !data[key].name || !data[key].years) {
+                valid = false;
+                break;
+              }
+            }
+
+            if (!valid) {
+              alert("Invalid JSON format. Expected mapping of program codes to name & years.");
+              note.textContent = "Parsing failed.";
+              return;
+            }
+
+            Object.assign(COURSE_TREE, data);
+            populateProgramSelect();
+
+            const firstKey = Object.keys(data)[0];
+            if (firstKey) {
+              document.getElementById('treeProgramSelect').value = firstKey;
+              document.getElementById('treeYearSelect').value = "1";
+              if (selectedTermCode) {
+                const name = rawDatabase[selectedTermCode].term_name.toLowerCase();
+                document.getElementById('treeSemSelect').value = name.includes('fall') ? 'F' : 'W';
+              } else {
+                document.getElementById('treeSemSelect').value = "F";
+              }
+              renderTree();
+            }
+
+            note.textContent = "JSON course tree loaded successfully!";
+            note.style.color = "var(--accent)";
+
+          } catch (err) {
+            console.error(err);
+            alert("Error parsing JSON file: " + err.message);
+            note.textContent = "Parsing failed.";
+          }
+        };
+        reader.readAsText(file);
+      } else {
+        alert("Please upload a PDF or JSON file.");
+        note.textContent = "Invalid file type.";
+      }
+    }
+
+    function getCourseNameFromDb(code) {
+      if (!rawDatabase) return "Extracted Course";
+      for (const term in rawDatabase) {
+        const courses = rawDatabase[term].courses;
+        if (courses && courses[code]) {
+          const sec = courses[code][0];
+          if (sec && sec.name) return sec.name;
+        }
+      }
+      return "Extracted Course";
+    }
+
     function renderTree() {
       const prog = document.getElementById('treeProgramSelect').value;
-      const year = parseInt(document.getElementById('treeYearSelect').value);
+      const yearVal = document.getElementById('treeYearSelect').value;
       const sem = document.getElementById('treeSemSelect').value;
       const grid = document.getElementById('treeCourseGrid');
       treeSelections.clear();
+      document.getElementById('treeNote').style.color = "";
 
-      if (!prog || !year || !sem) {
+      if (!selectedTermCode) {
+        grid.innerHTML = '<div class="tree-empty">Please select your term in Step 1 first.</div>';
+        document.getElementById('treeNote').textContent = '';
+        return;
+      }
+
+      if (!prog || !yearVal || !sem) {
         grid.innerHTML = '<div class="tree-empty">Select a program, year, and semester above.</div>';
         document.getElementById('treeNote').textContent = '';
         return;
       }
 
       const data = COURSE_TREE[prog];
-      if (!data || !data.years[year] || !data.years[year][sem]) {
-        grid.innerHTML = '<div class="tree-empty">No data for this combination yet.</div>';
+      if (!data) {
+        grid.innerHTML = '<div class="tree-empty">No data for this program.</div>';
         return;
       }
 
-      const courses = data.years[year][sem];
+      // Collect courses
+      let courses = [];
+      if (yearVal === 'all') {
+        for (let y = 1; y <= 4; y++) {
+          if (data.years[y] && data.years[y][sem]) {
+            courses = courses.concat(data.years[y][sem]);
+          }
+        }
+      } else {
+        const year = parseInt(yearVal);
+        if (data.years[year] && data.years[year][sem]) {
+          courses = data.years[year][sem];
+        }
+      }
+
+      // Filter PDF courses to keep only valid Carleton courses from the database (across all terms)
+      if (prog === 'PDF') {
+        courses = courses.filter(c => {
+          if (!rawDatabase) return false;
+          for (const term in rawDatabase) {
+            if (rawDatabase[term].courses && rawDatabase[term].courses[c.code]) {
+              return true;
+            }
+          }
+          return false;
+        });
+      }
+
+      if (courses.length === 0) {
+        grid.innerHTML = '<div class="tree-empty">No courses found matching this combination.</div>';
+        document.getElementById('treeNote').textContent = '';
+        return;
+      }
+
       grid.innerHTML = courses.map((c, i) => {
         const isElective = c.elective;
         const id = `tree-c-${i}`;
-        if (!isElective) treeSelections.add(i); // pre-check required courses
+        
+        // Check if offered in the currently active term
+        const key = Object.keys(allCourses).find(k => k.replace(/\s/g, '').toUpperCase() === c.code.replace(/\s/g, '').toUpperCase());
+        const isOffered = !!key;
+
+        // Only pre-select if required AND offered in this term
+        if (!isElective && isOffered) {
+          treeSelections.add(i);
+        }
+
+        const itemClass = isElective ? 'elective' : (isOffered ? 'checked' : 'not-offered');
+        const checkIcon = (!isElective && isOffered) ? '&#10003;' : '';
+        const nameSuffix = isElective 
+          ? ' <span style="color:var(--blue)">(elective)</span>' 
+          : (!isOffered ? ` <span style="color:var(--red); font-size: 11px;">(not offered this term)</span>` : '');
+
         return `
-      <div class="tree-course-item ${isElective ? 'elective' : 'checked'}" id="${id}" onclick="toggleTreeItem(${i}, this)">
-        <div class="tree-check">${isElective ? '' : '&#10003;'}</div>
+      <div class="tree-course-item ${itemClass}" id="${id}" ${isOffered ? `onclick="toggleTreeItem(${i}, this)"` : ''}>
+        <div class="tree-check">${checkIcon}</div>
         <div>
           <div class="tree-course-code">${c.code}</div>
-          <div class="tree-course-name">${c.name}${isElective ? ' <span style="color:var(--blue)">(elective)</span>' : ''}</div>
+          <div class="tree-course-name">${c.name}${nameSuffix}</div>
         </div>
       </div>`;
       }).join('');
 
       updateTreeNote(courses);
+
+      // Auto-choose the courses and add them to the wishlist
+      autoAddTreeSelections(courses);
     }
 
     function toggleTreeItem(idx, el) {
@@ -2034,6 +2491,7 @@
         el.querySelector('.tree-check').innerHTML = '&#10003;';
       }
       updateTreeNote(courses);
+      autoAddTreeSelections(courses);
     }
 
     function selectAllTree() {
@@ -2047,6 +2505,7 @@
         }
       });
       updateTreeNote(courses);
+      autoAddTreeSelections(courses);
     }
 
     function deselectAllTree() {
@@ -2058,47 +2517,101 @@
         if (el) { el.classList.remove('checked'); el.querySelector('.tree-check').innerHTML = ''; }
       });
       updateTreeNote(courses);
+      autoAddTreeSelections(courses);
     }
 
     function getCurrentTreeCourses() {
       const prog = document.getElementById('treeProgramSelect').value;
-      const year = parseInt(document.getElementById('treeYearSelect').value);
+      const yearVal = document.getElementById('treeYearSelect').value;
       const sem = document.getElementById('treeSemSelect').value;
-      if (!prog || !year || !sem) return null;
-      return COURSE_TREE[prog]?.years[year]?.[sem] || null;
+      if (!prog || !yearVal || !sem) return null;
+
+      const data = COURSE_TREE[prog];
+      if (!data) return null;
+
+      let courses = [];
+      if (yearVal === 'all') {
+        for (let y = 1; y <= 4; y++) {
+          if (data.years[y] && data.years[y][sem]) {
+            courses = courses.concat(data.years[y][sem]);
+          }
+        }
+      } else {
+        const year = parseInt(yearVal);
+        if (data.years[year] && data.years[year][sem]) {
+          courses = data.years[year][sem];
+        }
+      }
+
+      if (prog === 'PDF') {
+        courses = courses.filter(c => {
+          if (!rawDatabase) return false;
+          for (const term in rawDatabase) {
+            if (rawDatabase[term].courses && rawDatabase[term].courses[c.code]) {
+              return true;
+            }
+          }
+          return false;
+        });
+      }
+
+      return courses;
     }
 
     function updateTreeNote(courses) {
-      const count = [...treeSelections].filter(i => !courses[i]?.elective).length;
       document.getElementById('treeNote').textContent = `${treeSelections.size} selected`;
     }
 
-    function addTreeSelections() {
-      const courses = getCurrentTreeCourses();
+    function autoAddTreeSelections(courses) {
       if (!courses || treeSelections.size === 0) return;
 
-      let added = 0, skipped = 0, notFound = 0;
+      let added = [];
+      let skipped = 0;
+      let notFound = [];
+
       treeSelections.forEach(i => {
         const c = courses[i];
         if (!c || c.elective) return;
         const key = Object.keys(allCourses).find(k => k.replace(/\s/g, '').toUpperCase() === c.code.replace(/\s/g, '').toUpperCase());
-        if (!key) { notFound++; return; }
-        if (wishlist.includes(key)) { skipped++; return; }
+        if (!key) {
+          notFound.push(c.code);
+          return;
+        }
+        if (wishlist.includes(key)) {
+          skipped++;
+          return;
+        }
         wishlist.push(key);
-        added++;
+        added.push(key);
       });
 
-      renderChips();
-      updateRunBtn();
+      if (added.length > 0) {
+        renderChips();
+        updateRunBtn();
+      }
 
-      // Close panel and show feedback
-      document.getElementById('treePanel').classList.remove('open');
       const note = document.getElementById('treeNote');
-      let msg = `${added} course${added !== 1 ? 's' : ''} added to optimizer`;
-      if (skipped) msg += `, ${skipped} already in list`;
-      if (notFound) msg += `, ${notFound} not in your schedule file`;
-      note.textContent = msg;
-      document.getElementById('treePanel').classList.add('open');
+      let msg = "";
+      if (added.length > 0) {
+        msg += `Added: ${added.join(', ')}. `;
+      }
+      if (notFound.length > 0) {
+        msg += `Not offered this term: ${notFound.join(', ')}. `;
+      }
+      if (msg) {
+        note.textContent = msg;
+        note.style.color = "var(--accent)";
+      } else {
+        note.textContent = `${treeSelections.size} selected (all in wishlist)`;
+        note.style.color = "";
+      }
+    }
+
+    function addTreeSelections() {
+      const courses = getCurrentTreeCourses();
+      if (!courses) return;
+      autoAddTreeSelections(courses);
+      toggleTree();
     }
     // ─────────────────────────────────────────────────────────────────────────────
     // Spider-Verse floating bokeh bubbles
